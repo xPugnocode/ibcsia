@@ -1,51 +1,32 @@
 import sql from '@/lib/db'
-import { NextResponse } from 'next/server';
-
+import { NextResponse } from 'next/server'
+import bcrypt from 'bcrypt'
+import { v4 as uuidv4 } from 'uuid'
 
 export async function initializeDatabase() {
   try {
+    // Members table
     await sql`
       CREATE TABLE IF NOT EXISTS members (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
-        first_name TEXT NOT NULL,
-        last_name TEXT NOT NULL,
-        phone TEXT,
+        phone_number TEXT,
         address TEXT,
         role TEXT DEFAULT 'member',
         is_active BOOLEAN DEFAULT true,
-        carpool_can_drive BOOLEAN DEFAULT false,
-        carpool_seats_available INTEGER DEFAULT 0,
-        carpool_needs_ride BOOLEAN DEFAULT false,
+        emergency_contact_name TEXT,
+        emergency_contact_phone TEXT,
+        emergency_contact_relationship TEXT,
+        waiver_signed BOOLEAN DEFAULT false,
+        waiver_signed_date TIMESTAMP,
+        waiver_document_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS emergency_contacts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        member_id UUID REFERENCES members(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        relationship TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        email TEXT,
-        is_primary BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `
-
-    await sql`
-      CREATE TABLE IF NOT EXISTS waivers (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        member_id UUID UNIQUE REFERENCES members(id) ON DELETE CASCADE,
-        signed_date TIMESTAMP NOT NULL,
-        document_data BYTEA,
-        is_valid BOOLEAN DEFAULT true,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `
-
+    // Rides table
     await sql`
       CREATE TABLE IF NOT EXISTS rides (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,28 +45,7 @@ export async function initializeDatabase() {
       )
     `
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS ride_votes (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        ride_id UUID REFERENCES rides(id) ON DELETE CASCADE,
-        member_id UUID REFERENCES members(id) ON DELETE CASCADE,
-        vote BOOLEAN NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(ride_id, member_id)
-      )
-    `
-
-    await sql`
-      CREATE TABLE IF NOT EXISTS ride_participants (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        ride_id UUID REFERENCES rides(id) ON DELETE CASCADE,
-        member_id UUID REFERENCES members(id) ON DELETE CASCADE,
-        status TEXT DEFAULT 'registered',
-        registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(ride_id, member_id)
-      )
-    `
-
+    // Media table
     await sql`
       CREATE TABLE IF NOT EXISTS media (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,6 +59,28 @@ export async function initializeDatabase() {
       )
     `
 
+    // Users table for authentication
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        member_id UUID UNIQUE REFERENCES members(id) ON DELETE CASCADE,
+        email TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+
+    // Sessions table
+    await sql`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT UNIQUE NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+
     console.log('Database initialized successfully!')
     return true
   } catch (error) {
@@ -107,9 +89,105 @@ export async function initializeDatabase() {
   }
 }
 
+export async function signup(data: { email: string; password: string; name: string }) {
+  try {
+    const hashedPassword = await bcrypt.hash(data.password, 10)
+
+    // Check if member already exists
+    const existingMember = await sql`
+      SELECT id FROM members WHERE email = ${data.email}
+    `
+
+    let memberId
+
+    if (existingMember[0]) {
+      // Member exists, use their ID
+      memberId = existingMember[0].id
+    } else {
+      // Create new member
+      const memberResult = await sql`
+        INSERT INTO members (name, email, role)
+        VALUES (${data.name}, ${data.email}, 'member')
+        RETURNING id
+      `
+      memberId = memberResult[0].id
+    }
+
+    // Create user (this will fail if user already exists due to UNIQUE constraint)
+    const userResult = await sql`
+      INSERT INTO users (member_id, email, password)
+      VALUES (${memberId}, ${data.email}, ${hashedPassword})
+      RETURNING id, email
+    `
+
+    return userResult[0]
+  } catch (error) {
+    console.error('Error signing up:', error)
+    throw error
+  }
+}
+
+export async function login(data: { email: string; password: string }) {
+  try {
+    const userResult = await sql`SELECT * FROM users WHERE email = ${data.email}`
+
+    if (!userResult[0]) {
+      throw new Error('Invalid credentials')
+    }
+
+    const isValid = await bcrypt.compare(data.password, userResult[0].password)
+    if (!isValid) {
+      throw new Error('Invalid credentials')
+    }
+
+    const token = uuidv4()
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+
+    await sql`
+      INSERT INTO sessions (user_id, token, expires_at)
+      VALUES (${userResult[0].id}, ${token}, ${expiresAt.toISOString()})
+    `
+
+    return { token, userId: userResult[0].id }
+  } catch (error) {
+    console.error('Error logging in:', error)
+    throw error
+  }
+}
+
+export async function logout(token: string) {
+  try {
+    await sql`DELETE FROM sessions WHERE token = ${token}`
+    return true
+  } catch (error) {
+    console.error('Error logging out:', error)
+    throw error
+  }
+}
+
+export async function verifyToken(token: string) {
+  try {
+    const sessionResult = await sql`
+      SELECT s.*, u.member_id 
+      FROM sessions s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.token = ${token} AND s.expires_at > CURRENT_TIMESTAMP
+    `
+
+    if (!sessionResult[0]) {
+      throw new Error('Invalid or expired token')
+    }
+
+    return sessionResult[0]
+  } catch (error) {
+    console.error('Error verifying token:', error)
+    throw error
+  }
+}
+
 export async function getMembers() {
   try {
-    const members = await sql`SELECT * FROM members ORDER BY last_name`
+    const members = await sql`SELECT * FROM members ORDER BY name`
     return members
   } catch (error) {
     console.error('Error fetching members:', error)
@@ -118,17 +196,16 @@ export async function getMembers() {
 }
 
 export async function createMember(data: {
+  name: string
   email: string
-  first_name: string
-  last_name: string
-  phone?: string
+  phone_number?: string
   address?: string
   role?: string
 }) {
   try {
     const result = await sql`
-      INSERT INTO members (email, first_name, last_name, phone, address, role)
-      VALUES (${data.email}, ${data.first_name}, ${data.last_name}, ${data.phone || null}, ${data.address || null}, ${data.role || 'member'})
+      INSERT INTO members (name, email, phone_number, address, role)
+      VALUES (${data.name}, ${data.email}, ${data.phone_number || null}, ${data.address || null}, ${data.role || 'member'})
       RETURNING *
     `
     return result[0]
@@ -138,24 +215,22 @@ export async function createMember(data: {
   }
 }
 
-export async function updateMember(id: string, data: {
-  email?: string
-  first_name?: string
-  last_name?: string
-  phone?: string
-  address?: string
-  role?: string
-}) {
+export async function updateMember(id: string, data: any) {
   try {
     const result = await sql`
       UPDATE members 
       SET 
+        name = COALESCE(${data.name || null}, name),
         email = COALESCE(${data.email || null}, email),
-        first_name = COALESCE(${data.first_name || null}, first_name),
-        last_name = COALESCE(${data.last_name || null}, last_name),
-        phone = COALESCE(${data.phone || null}, phone),
+        phone_number = COALESCE(${data.phone_number || null}, phone_number),
         address = COALESCE(${data.address || null}, address),
         role = COALESCE(${data.role || null}, role),
+        emergency_contact_name = COALESCE(${data.emergency_contact_name || null}, emergency_contact_name),
+        emergency_contact_phone = COALESCE(${data.emergency_contact_phone || null}, emergency_contact_phone),
+        emergency_contact_relationship = COALESCE(${data.emergency_contact_relationship || null}, emergency_contact_relationship),
+        waiver_signed = COALESCE(${data.waiver_signed || null}, waiver_signed),
+        waiver_signed_date = COALESCE(${data.waiver_signed_date || null}, waiver_signed_date),
+        waiver_document_url = COALESCE(${data.waiver_document_url || null}, waiver_document_url),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ${id}
       RETURNING *
@@ -177,6 +252,103 @@ export async function deleteMember(id: string) {
   }
 }
 
+export async function getRides() {
+  try {
+    const rides = await sql`SELECT * FROM rides ORDER BY date DESC`
+    return rides
+  } catch (error) {
+    console.error('Error fetching rides:', error)
+    throw error
+  }
+}
+
+export async function createRide(data: any) {
+  try {
+    const result = await sql`
+      INSERT INTO rides (title, description, date, meeting_location, destination, distance_miles, difficulty, max_participants, created_by)
+      VALUES (${data.title}, ${data.description || null}, ${data.date}, ${data.meeting_location}, ${data.destination || null}, ${data.distance_miles || null}, ${data.difficulty || null}, ${data.max_participants || null}, ${data.created_by})
+      RETURNING *
+    `
+    return result[0]
+  } catch (error) {
+    console.error('Error creating ride:', error)
+    throw error
+  }
+}
+
+export async function updateRide(id: string, data: any) {
+  try {
+    const result = await sql`
+      UPDATE rides
+      SET
+        title = COALESCE(${data.title || null}, title),
+        description = COALESCE(${data.description || null}, description),
+        date = COALESCE(${data.date || null}, date),
+        meeting_location = COALESCE(${data.meeting_location || null}, meeting_location),
+        destination = COALESCE(${data.destination || null}, destination),
+        distance_miles = COALESCE(${data.distance_miles || null}, distance_miles),
+        difficulty = COALESCE(${data.difficulty || null}, difficulty),
+        max_participants = COALESCE(${data.max_participants || null}, max_participants),
+        status = COALESCE(${data.status || null}, status),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `
+    return result[0]
+  } catch (error) {
+    console.error('Error updating ride:', error)
+    throw error
+  }
+}
+
+export async function deleteRide(id: string) {
+  try {
+    await sql`DELETE FROM rides WHERE id = ${id}`
+    return true
+  } catch (error) {
+    console.error('Error deleting ride:', error)
+    throw error
+  }
+}
+
+export async function getMedia(rideId?: string) {
+  try {
+    if (rideId) {
+      const media = await sql`SELECT * FROM media WHERE ride_id = ${rideId} ORDER BY uploaded_at DESC`
+      return media
+    }
+    const media = await sql`SELECT * FROM media ORDER BY uploaded_at DESC`
+    return media
+  } catch (error) {
+    console.error('Error fetching media:', error)
+    throw error
+  }
+}
+
+export async function createMedia(data: any) {
+  try {
+    const result = await sql`
+      INSERT INTO media (ride_id, uploaded_by, blob_url, caption, tags, visibility)
+      VALUES (${data.ride_id || null}, ${data.uploaded_by}, ${data.blob_url}, ${data.caption || null}, ${data.tags ? JSON.stringify(data.tags) : null}, ${data.visibility || 'members'})
+      RETURNING *
+    `
+    return result[0]
+  } catch (error) {
+    console.error('Error creating media:', error)
+    throw error
+  }
+}
+
+export async function deleteMedia(id: string) {
+  try {
+    await sql`DELETE FROM media WHERE id = ${id}`
+    return true
+  } catch (error) {
+    console.error('Error deleting media:', error)
+    throw error
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { action, ...data } = await request.json()
@@ -184,6 +356,26 @@ export async function POST(request: Request) {
     if (action === 'init') {
       await initializeDatabase()
       return NextResponse.json({ success: true, message: 'Database initialized' })
+    }
+
+    if (action === 'signup') {
+      const user = await signup(data)
+      return NextResponse.json(user)
+    }
+
+    if (action === 'login') {
+      const result = await login(data)
+      return NextResponse.json(result)
+    }
+
+    if (action === 'logout') {
+      await logout(data.token)
+      return NextResponse.json({ success: true })
+    }
+
+    if (action === 'verifyToken') {
+      const session = await verifyToken(data.token)
+      return NextResponse.json(session)
     }
 
     if (action === 'getMembers') {
@@ -206,10 +398,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true })
     }
 
+    if (action === 'getRides') {
+      const rides = await getRides()
+      return NextResponse.json(rides)
+    }
+
+    if (action === 'createRide') {
+      const ride = await createRide(data)
+      return NextResponse.json(ride)
+    }
+
+    if (action === 'updateRide') {
+      const ride = await updateRide(data.id, data)
+      return NextResponse.json(ride)
+    }
+
+    if (action === 'deleteRide') {
+      await deleteRide(data.id)
+      return NextResponse.json({ success: true })
+    }
+
+    if (action === 'getMedia') {
+      const media = await getMedia(data.rideId)
+      return NextResponse.json(media)
+    }
+
+    if (action === 'createMedia') {
+      const media = await createMedia(data)
+      return NextResponse.json(media)
+    }
+
+    if (action === 'deleteMedia') {
+      await deleteMedia(data.id)
+      return NextResponse.json({ success: true })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    console.error(error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-export default sql
