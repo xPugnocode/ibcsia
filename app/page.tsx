@@ -88,8 +88,13 @@ export default function Header() {
     }}>
       <h1 style={{ margin: 0, fontSize: '20px' }}>Lincoln Bike Club</h1>
       <nav style={{ display: 'flex', gap: '15px' }}>
-        <Link href="/gallery" style={{ textDecoration: 'none', color: '#333' }}>Gallery</Link>
-        <Link href="/members" style={{ textDecoration: 'none', color: '#333' }}>Members</Link>
+        <Link href="/info" style={{ textDecoration: 'none', color: '#333' }}>Info</Link>
+        {isLoggedIn && (
+          <>
+            <Link href="/gallery" style={{ textDecoration: 'none', color: '#333' }}>Gallery</Link>
+            <Link href="/members" style={{ textDecoration: 'none', color: '#333' }}>Members</Link>
+          </>
+        )}
         {isLoggedIn ? (
           <button
             onClick={handleLogout}
