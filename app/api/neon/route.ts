@@ -3,6 +3,26 @@ import { NextResponse } from 'next/server'
 import bcrypt from 'bcrypt'
 import { v4 as uuidv4 } from 'uuid'
 
+function getUniqueConstraintMessage(error: unknown): string | null {
+  const dbError = error as { code?: string; constraint?: string; detail?: string }
+
+  if (dbError?.code !== '23505') {
+    return null
+  }
+
+  const constraint = dbError.constraint || 'unknown'
+
+  if (constraint === 'users_member_id_key') {
+    return 'Email has already been used'
+  }
+
+  if (constraint === 'members_name_unique') {
+    return 'Name has already been used'
+  }
+
+  return 'Value already exists'
+}
+
 export async function initializeDatabase() {
   try {
     // Members table
@@ -24,6 +44,21 @@ export async function initializeDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `
+
+    // Ensure name is unique for existing databases
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'members_name_unique'
+        ) THEN
+          ALTER TABLE members
+          ADD CONSTRAINT members_name_unique UNIQUE (name);
+        END IF;
+      END$$;
     `
 
     // Rides table
@@ -433,9 +468,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true })
     }
 
-    return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+    return NextResponse.json({ error: 'Unknown action' }, { status: 500 })
   } catch (error) {
     console.error(error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const uniqueMessage = getUniqueConstraintMessage(error)
+    if (uniqueMessage) {
+      return NextResponse.json({ error: uniqueMessage }, { status: 409 })
+    }
+
+    return NextResponse.json({ error: (error as any).message }, { status: 500 })
   }
 }
