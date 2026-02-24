@@ -1,6 +1,10 @@
-import Link from 'next/link'
+"use client"
+
+import { useRouter } from 'next/navigation'
 
 export default function NotFound() {
+  const router = useRouter()
+
   return (
     <div style={{
       display: 'flex',
@@ -16,19 +20,21 @@ export default function NotFound() {
       <p style={{ marginTop: '10px', color: '#888' }}>
         Sorry, we couldn&apos;t find the page you&apos;re looking for.
       </p>
-      <Link
-        href="/"
+      <button
+        type="button"
+        onClick={() => router.push('/')}
         style={{
           marginTop: '20px',
           padding: '10px 20px',
           backgroundColor: '#007bff',
           color: 'white',
-          textDecoration: 'none',
+          border: 'none',
+          cursor: 'pointer',
           borderRadius: '4px'
         }}
       >
         Go back home
-      </Link>
+      </button>
     </div>
   )
 }
