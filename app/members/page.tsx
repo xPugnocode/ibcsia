@@ -28,6 +28,22 @@ export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingMember, setEditingMember] = useState<Member | null>(null)
+  const [editFormData, setEditFormData] = useState<Partial<Member>>({})
+  const [addFormData, setAddFormData] = useState({
+    name: '',
+    email: '',
+    phone_number: '',
+    address: '',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relationship: '',
+    role: 'member'
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [addError, setAddError] = useState('')
 
   useEffect(() => {
     checkAuth()
@@ -80,6 +96,116 @@ export default function MembersPage() {
   const filteredMembers = members.filter(member =>
     member.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
+
+  function handleEditClick(member: Member) {
+    if ((isLeader || member.id === currentUserId)) {
+      setEditingMember(member)
+      setEditFormData({ ...member })
+      setSubmitError('')
+      setShowEditModal(true)
+    }
+  }
+
+  async function handleEditSubmit() {
+    if (!editingMember) return
+    
+    setIsSubmitting(true)
+    setSubmitError('')
+    
+    try {
+      const response = await fetch('/api/neon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'updateMember',
+          id: editingMember.id,
+          ...editFormData
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        setSubmitError(data.error || 'Failed to update member')
+        return
+      }
+      
+      // Update members list with new data
+      setMembers(members.map(m => m.id === editingMember.id ? data : m))
+      setShowEditModal(false)
+      setEditingMember(null)
+      setEditFormData({})
+    } catch (error) {
+      setSubmitError('An error occurred while updating the member')
+      console.error('Update error:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  function handleEditInputChange(field: string, value: any) {
+    setEditFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  function handleAddInputChange(field: string, value: any) {
+    setAddFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  async function handleAddSubmit() {
+    setIsSubmitting(true)
+    setAddError('')
+
+    // Validation
+    if (!addFormData.name.trim() || !addFormData.email.trim()) {
+      setAddError('Name and email are required')
+      setIsSubmitting(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/neon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'createMember',
+          ...addFormData
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setAddError(data.error || 'Failed to add member')
+        setIsSubmitting(false)
+        return
+      }
+
+      // Add new member to the list
+      setMembers([...members, data])
+      setShowAddModal(false)
+      setAddFormData({
+        name: '',
+        email: '',
+        phone_number: '',
+        address: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+        emergency_contact_relationship: '',
+        role: 'member'
+      })
+    } catch (error) {
+      setAddError('An error occurred while adding the member')
+      console.error('Add member error:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -200,6 +326,7 @@ export default function MembersPage() {
               
               {(isLeader || member.id === currentUserId) && (
                 <button
+                  onClick={() => handleEditClick(member)}
                   style={{
                     marginTop: '10px',
                     padding: '6px 12px',
@@ -218,6 +345,513 @@ export default function MembersPage() {
           ))}
         </div>
       </div>
+
+      {/* Edit Member Modal */}
+      {showEditModal && editingMember && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '8px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Edit Member Information</h2>
+            
+            {submitError && (
+              <div style={{
+                backgroundColor: '#f8d7da',
+                color: '#721c24',
+                padding: '12px',
+                borderRadius: '4px',
+                marginBottom: '15px',
+                border: '1px solid #f5c6cb'
+              }}>
+                {submitError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {/* Name */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.name || ''}
+                  onChange={(e) => handleEditInputChange('name', e.target.value)}
+                  disabled={currentUserRole !== 'admin' && currentUserRole !== 'leader'}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    opacity: currentUserRole !== 'admin' && currentUserRole !== 'leader' ? 0.6 : 1
+                  }}
+                />
+              </div>
+
+              {/* Email */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={editFormData.email || ''}
+                  onChange={(e) => handleEditInputChange('email', e.target.value)}
+                  disabled={currentUserRole !== 'admin' && currentUserRole !== 'leader'}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    opacity: currentUserRole !== 'admin' && currentUserRole !== 'leader' ? 0.6 : 1
+                  }}
+                />
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={editFormData.phone_number || ''}
+                  onChange={(e) => handleEditInputChange('phone_number', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              {/* Address */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.address || ''}
+                  onChange={(e) => handleEditInputChange('address', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              {/* Emergency Contact Name */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Emergency Contact Name
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.emergency_contact_name || ''}
+                  onChange={(e) => handleEditInputChange('emergency_contact_name', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              {/* Emergency Contact Phone */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Emergency Contact Phone
+                </label>
+                <input
+                  type="tel"
+                  value={editFormData.emergency_contact_phone || ''}
+                  onChange={(e) => handleEditInputChange('emergency_contact_phone', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              {/* Emergency Contact Relationship */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Emergency Contact Relationship
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.emergency_contact_relationship || ''}
+                  onChange={(e) => handleEditInputChange('emergency_contact_relationship', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              {/* Role - Admin/Leader only */}
+              {isLeader && (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                    Role
+                  </label>
+                  <select
+                    value={editFormData.role || 'member'}
+                    onChange={(e) => handleEditInputChange('role', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="member">Member</option>
+                    <option value="leader">Leader</option>
+                    {currentUserRole === 'admin' && <option value="admin">Admin</option>}
+                  </select>
+                </div>
+              )}
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button
+                  onClick={handleEditSubmit}
+                  disabled={isSubmitting}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold',
+                    opacity: isSubmitting ? 0.6 : 1
+                  }}
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  disabled={isSubmitting}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    opacity: isSubmitting ? 0.6 : 1
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Member Modal */}
+      {showAddModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '8px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflowY: 'auto'
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Add New Member</h2>
+            
+            {addError && (
+              <div style={{
+                backgroundColor: '#f8d7da',
+                color: '#721c24',
+                padding: '12px',
+                borderRadius: '4px',
+                marginBottom: '15px',
+                border: '1px solid #f5c6cb'
+              }}>
+                {addError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {/* Name */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Name <span style={{ color: '#dc3545' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addFormData.name}
+                  onChange={(e) => handleAddInputChange('name', e.target.value)}
+                  placeholder="Enter member name"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Email - for account linking */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Email <span style={{ color: '#dc3545' }}>*</span>
+                </label>
+                <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#666' }}>
+                  This email will be used to link their account later
+                </p>
+                <input
+                  type="email"
+                  value={addFormData.email}
+                  onChange={(e) => handleAddInputChange('email', e.target.value)}
+                  placeholder="Enter email address"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={addFormData.phone_number}
+                  onChange={(e) => handleAddInputChange('phone_number', e.target.value)}
+                  placeholder="(123) 456-7890"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Address */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={addFormData.address}
+                  onChange={(e) => handleAddInputChange('address', e.target.value)}
+                  placeholder="Enter address"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Emergency Contact Name */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Emergency Contact Name
+                </label>
+                <input
+                  type="text"
+                  value={addFormData.emergency_contact_name}
+                  onChange={(e) => handleAddInputChange('emergency_contact_name', e.target.value)}
+                  placeholder="Enter emergency contact name"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Emergency Contact Phone */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Emergency Contact Phone
+                </label>
+                <input
+                  type="tel"
+                  value={addFormData.emergency_contact_phone}
+                  onChange={(e) => handleAddInputChange('emergency_contact_phone', e.target.value)}
+                  placeholder="(123) 456-7890"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Emergency Contact Relationship */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Emergency Contact Relationship
+                </label>
+                <input
+                  type="text"
+                  value={addFormData.emergency_contact_relationship}
+                  onChange={(e) => handleAddInputChange('emergency_contact_relationship', e.target.value)}
+                  placeholder="Enter relation to emergency contact"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                  Role
+                </label>
+                <select
+                  value={addFormData.role}
+                  onChange={(e) => handleAddInputChange('role', e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="member">Member</option>
+                  <option value="leader">Leader</option>
+                  {currentUserRole === 'admin' && <option value="admin">Admin</option>}
+                </select>
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <button
+                  onClick={handleAddSubmit}
+                  disabled={isSubmitting}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold',
+                    opacity: isSubmitting ? 0.6 : 1
+                  }}
+                >
+                  {isSubmitting ? 'Adding...' : 'Add Member'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddModal(false)
+                    setAddError('')
+                    setAddFormData({
+                      name: '',
+                      email: '',
+                      phone_number: '',
+                      address: '',
+                      emergency_contact_name: '',
+                      emergency_contact_phone: '',
+                      emergency_contact_relationship: '',
+                      role: 'member'
+                    })
+                  }}
+                  disabled={isSubmitting}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    opacity: isSubmitting ? 0.6 : 1
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
