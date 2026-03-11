@@ -13,51 +13,66 @@ export default function Header() {
 
   useEffect(() => {
     const token = localStorage.getItem('authToken')
-    setIsLoggedIn(!!token)
-    
-    if (token) {
-      // Fetch user info
-      fetch('/api/neon', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'verifyToken', token }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.user_id) {
-            // Fetch member info
-            fetch('/api/neon', {
-              method: 'POST',
-              body: JSON.stringify({ action: 'getMembers' }),
-            })
-              .then(res => res.json())
-              .then(members => {
-                const member = members.find((m: any) => m.id === data.member_id)
-                if (member) setUserName(member.name)
-              })
-          }
-        })
-        .catch(() => {})
-      
-      // Fetch next bike ride
-      fetch('/api/neon', {
-        method: 'POST',
-        body: JSON.stringify({ action: 'getRides' }),
-      })
-        .then(res => res.json())
-        .then(rides => {
-          const now = new Date()
-          const futureRides = rides
-            .filter((ride: any) => new Date(ride.date) > now)
-            .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
-          
-          if (futureRides.length > 0) {
-            setNextBikeRide(futureRides[0].title)
-          } else {
-            setNextBikeRide(null)
-          }
-        })
-        .catch(() => setNextBikeRide(null))
+
+    if (!token) {
+      setIsLoggedIn(false)
+      setUserName('')
+      setNextBikeRide(null)
+      return
     }
+
+    fetch('/api/neon', {
+      method: 'POST',
+      body: JSON.stringify({ action: 'verifyToken', token }),
+    })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error('Invalid or expired token')
+        }
+        return res.json()
+      })
+      .then(data => {
+        if (!data.user_id) {
+          throw new Error('Invalid or expired token')
+        }
+
+        setIsLoggedIn(true)
+
+        fetch('/api/neon', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'getMembers' }),
+        })
+          .then(res => res.json())
+          .then(members => {
+            const member = members.find((m: any) => m.id === data.member_id)
+            if (member) setUserName(member.name)
+          })
+
+        fetch('/api/neon', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'getRides' }),
+        })
+          .then(res => res.json())
+          .then(rides => {
+            const now = new Date()
+            const futureRides = rides
+              .filter((ride: any) => new Date(ride.date) > now)
+              .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+            if (futureRides.length > 0) {
+              setNextBikeRide(futureRides[0].title)
+            } else {
+              setNextBikeRide(null)
+            }
+          })
+          .catch(() => setNextBikeRide(null))
+      })
+      .catch(() => {
+        localStorage.removeItem('authToken')
+        setIsLoggedIn(false)
+        setUserName('')
+        setNextBikeRide(null)
+      })
   }, [])
 
   function handleLogout() {
@@ -142,7 +157,7 @@ export default function Header() {
             )}
           </>
         ) : (
-          <p>test youre not logged in i hope</p>
+          <p>Please log in to view more information!</p>
         )}
       </main></>
   )

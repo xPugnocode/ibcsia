@@ -236,11 +236,36 @@ export async function createMember(data: {
   phone_number?: string
   address?: string
   role?: string
+  emergency_contact_name?: string
+  emergency_contact_phone?: string
+  emergency_contact_relationship?: string
 }) {
   try {
+    const phoneDigits = data.phone_number ? data.phone_number.replace(/\D/g, '') : ''
+    if (phoneDigits && phoneDigits.length !== 10) {
+      throw new Error('Phone number must be exactly 10 digits')
+    }
+
+    const emergencyPhoneDigits = data.emergency_contact_phone ? data.emergency_contact_phone.replace(/\D/g, '') : ''
+    if (emergencyPhoneDigits && emergencyPhoneDigits.length !== 10) {
+      throw new Error('Emergency contact phone must be exactly 10 digits')
+    }
+
     const result = await sql`
-      INSERT INTO members (name, email, phone_number, address, role)
-      VALUES (${data.name}, ${data.email}, ${data.phone_number || null}, ${data.address || null}, ${data.role || 'member'})
+      INSERT INTO members (
+        name, email, phone_number, address, role,
+        emergency_contact_name, emergency_contact_phone, emergency_contact_relationship
+      )
+      VALUES (
+        ${data.name}, 
+        ${data.email}, 
+        ${phoneDigits || null}, 
+        ${data.address || null}, 
+        ${data.role || 'member'},
+        ${data.emergency_contact_name || null},
+        ${emergencyPhoneDigits || null},
+        ${data.emergency_contact_relationship || null}
+      )
       RETURNING *
     `
     return result[0]
@@ -252,16 +277,28 @@ export async function createMember(data: {
 
 export async function updateMember(id: string, data: any) {
   try {
+    const phoneDigits = data.phone_number ? String(data.phone_number).replace(/\D/g, '') : null
+    if (phoneDigits && phoneDigits.length !== 10) {
+      throw new Error('Phone number must be exactly 10 digits')
+    }
+
+    const emergencyPhoneDigits = data.emergency_contact_phone
+      ? String(data.emergency_contact_phone).replace(/\D/g, '')
+      : null
+    if (emergencyPhoneDigits && emergencyPhoneDigits.length !== 10) {
+      throw new Error('Emergency contact phone must be exactly 10 digits')
+    }
+
     const result = await sql`
       UPDATE members 
       SET 
         name = COALESCE(${data.name || null}, name),
         email = COALESCE(${data.email || null}, email),
-        phone_number = COALESCE(${data.phone_number || null}, phone_number),
+        phone_number = COALESCE(${phoneDigits}, phone_number),
         address = COALESCE(${data.address || null}, address),
         role = COALESCE(${data.role || null}, role),
         emergency_contact_name = COALESCE(${data.emergency_contact_name || null}, emergency_contact_name),
-        emergency_contact_phone = COALESCE(${data.emergency_contact_phone || null}, emergency_contact_phone),
+        emergency_contact_phone = COALESCE(${emergencyPhoneDigits}, emergency_contact_phone),
         emergency_contact_relationship = COALESCE(${data.emergency_contact_relationship || null}, emergency_contact_relationship),
         waiver_signed = COALESCE(${data.waiver_signed || null}, waiver_signed),
         waiver_signed_date = COALESCE(${data.waiver_signed_date || null}, waiver_signed_date),

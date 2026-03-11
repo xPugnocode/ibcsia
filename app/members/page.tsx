@@ -2,22 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-interface Member {
-  id: string
-  name: string
-  email: string
-  phone_number?: string
-  address?: string
-  role: string
-  emergency_contact_name?: string
-  emergency_contact_phone?: string
-  emergency_contact_relationship?: string
-  waiver_signed: boolean
-  waiver_signed_date?: string
-  waiver_document_url?: string
-  is_active: boolean
-}
+import { Member } from '@/types/memberInfo'
 
 export default function MembersPage() {
   const router = useRouter()
@@ -34,11 +19,13 @@ export default function MembersPage() {
   const [addFormData, setAddFormData] = useState({
     name: '',
     email: '',
-    phone_number: '',
+    phoneNumber: '',
     address: '',
-    emergency_contact_name: '',
-    emergency_contact_phone: '',
-    emergency_contact_relationship: '',
+    emergencyContact: {
+      name: '',
+      phoneNumber: '',
+      relationship: ''
+    },
     role: 'member'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -48,6 +35,56 @@ export default function MembersPage() {
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Transform database format to TypeScript interface format
+  function transformMemberFromDB(dbMember: any): Member {
+    return {
+      id: dbMember.id,
+      name: dbMember.name,
+      email: dbMember.email,
+      phoneNumber: dbMember.phone_number || '',
+      address: dbMember.address || '',
+      emergencyContact: {
+        name: dbMember.emergency_contact_name || '',
+        phoneNumber: dbMember.emergency_contact_phone || '',
+        relationship: dbMember.emergency_contact_relationship || ''
+      },
+      role: dbMember.role,
+      waiver: {
+        signed: dbMember.waiver_signed || false,
+        signedDate: dbMember.waiver_signed_date ? new Date(dbMember.waiver_signed_date) : undefined,
+        documentUrl: dbMember.waiver_document_url
+      },
+      isActive: dbMember.is_active !== false
+    }
+  }
+
+  // Transform TypeScript interface format to database format
+  function transformMemberToDB(member: Partial<Member>): any {
+    const dbFormat: any = {}
+    
+    if (member.name !== undefined) dbFormat.name = member.name
+    if (member.email !== undefined) dbFormat.email = member.email
+    if (member.phoneNumber !== undefined) dbFormat.phone_number = member.phoneNumber
+    if (member.address !== undefined) dbFormat.address = member.address
+    if (member.role !== undefined) dbFormat.role = member.role
+    
+    if (member.emergencyContact) {
+      if (member.emergencyContact.name !== undefined) dbFormat.emergency_contact_name = member.emergencyContact.name
+      if (member.emergencyContact.phoneNumber !== undefined) dbFormat.emergency_contact_phone = member.emergencyContact.phoneNumber
+      if (member.emergencyContact.relationship !== undefined) dbFormat.emergency_contact_relationship = member.emergencyContact.relationship
+    }
+    
+    if (member.waiver) {
+      if (member.waiver.signed !== undefined) dbFormat.waiver_signed = member.waiver.signed
+      if (member.waiver.signedDate !== undefined) dbFormat.waiver_signed_date = member.waiver.signedDate
+      if (member.waiver.documentUrl !== undefined) dbFormat.waiver_document_url = member.waiver.documentUrl
+    }
+    
+    if (member.isActive !== undefined) dbFormat.is_active = member.isActive
+    
+    return dbFormat
+  }
 
   async function checkAuth() {
     const token = localStorage.getItem('authToken')
@@ -64,27 +101,35 @@ export default function MembersPage() {
         body: JSON.stringify({ action: 'verifyToken', token })
       })
       const data = await response.json()
+
+      if (!response.ok || !data.member_id) {
+        localStorage.removeItem('authToken')
+        setIsLoggedIn(false)
+        router.push('/auth/login')
+        return
+      }
       
-      if (data.member_id) {
-        setCurrentUserId(data.member_id)
-        setIsLoggedIn(true)
-        
-        // Get member details to check role
-        const membersResponse = await fetch('/api/neon', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'getMembers' })
-        })
-        const membersData = await membersResponse.json()
-        setMembers(membersData)
-        
-        const currentMember = membersData.find((m: Member) => m.id === data.member_id)
-        if (currentMember) {
-          setCurrentUserRole(currentMember.role || 'member')
-        }
+      setCurrentUserId(data.member_id)
+      setIsLoggedIn(true)
+      
+      // Get member details to check role
+      const membersResponse = await fetch('/api/neon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getMembers' })
+      })
+      const membersData = await membersResponse.json()
+      // Transform all members from DB format
+      const transformedMembers = membersData.map(transformMemberFromDB)
+      setMembers(transformedMembers)
+      
+      const currentMember = transformedMembers.find((m: Member) => m.id === data.member_id)
+      if (currentMember) {
+        setCurrentUserRole(currentMember.role || 'member')
       }
     } catch (error) {
       console.error('Auth error:', error)
+      localStorage.removeItem('authToken')
       router.push('/auth/login')
     } finally {
       setIsLoading(false)
@@ -111,15 +156,40 @@ export default function MembersPage() {
     
     setIsSubmitting(true)
     setSubmitError('')
+
+    const normalizedPhoneNumber = (editFormData.phoneNumber || '').replace(/\D/g, '')
+    if (normalizedPhoneNumber && normalizedPhoneNumber.length !== 10) {
+      setSubmitError('Phone number must be exactly 10 digits')
+      setIsSubmitting(false)
+      return
+    }
+
+    const normalizedEmergencyPhone = (editFormData.emergencyContact?.phoneNumber || '').replace(/\D/g, '')
+    if (normalizedEmergencyPhone && normalizedEmergencyPhone.length !== 10) {
+      setSubmitError('Emergency contact phone must be exactly 10 digits')
+      setIsSubmitting(false)
+      return
+    }
     
     try {
+      // Transform to DB format before sending
+      const dbData = transformMemberToDB({
+        ...editFormData,
+        phoneNumber: normalizedPhoneNumber,
+        emergencyContact: {
+          name: editFormData.emergencyContact?.name || '',
+          phoneNumber: normalizedEmergencyPhone,
+          relationship: editFormData.emergencyContact?.relationship || ''
+        }
+      })
+      
       const response = await fetch('/api/neon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'updateMember',
           id: editingMember.id,
-          ...editFormData
+          ...dbData
         })
       })
       
@@ -130,8 +200,9 @@ export default function MembersPage() {
         return
       }
       
-      // Update members list with new data
-      setMembers(members.map(m => m.id === editingMember.id ? data : m))
+      // Transform response back to TypeScript format and update members list
+      const transformedMember = transformMemberFromDB(data)
+      setMembers(members.map(m => m.id === editingMember.id ? transformedMember : m))
       setShowEditModal(false)
       setEditingMember(null)
       setEditFormData({})
@@ -144,17 +215,49 @@ export default function MembersPage() {
   }
 
   function handleEditInputChange(field: string, value: any) {
-    setEditFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
+    const normalizedValue =
+      field === 'phoneNumber' || field === 'emergencyContact.phoneNumber'
+        ? String(value).replace(/\D/g, '').slice(0, 10)
+        : value
+
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.')
+      setEditFormData(prev => ({
+        ...prev,
+        [parent]: {
+          ...(prev[parent as keyof Member] as any),
+          [child]: normalizedValue
+        }
+      }))
+    } else {
+      setEditFormData(prev => ({
+        ...prev,
+        [field]: normalizedValue
+      }))
+    }
   }
 
   function handleAddInputChange(field: string, value: any) {
-    setAddFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
+    const normalizedValue =
+      field === 'phoneNumber' || field === 'emergencyContact.phoneNumber'
+        ? String(value).replace(/\D/g, '').slice(0, 10)
+        : value
+
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.')
+      setAddFormData(prev => ({
+        ...prev,
+        [parent]: {
+          ...(prev as any)[parent],
+          [child]: normalizedValue
+        }
+      }))
+    } else {
+      setAddFormData(prev => ({
+        ...prev,
+        [field]: normalizedValue
+      }))
+    }
   }
 
   async function handleAddSubmit() {
@@ -168,13 +271,39 @@ export default function MembersPage() {
       return
     }
 
+    const normalizedPhoneNumber = (addFormData.phoneNumber || '').replace(/\D/g, '')
+    if (normalizedPhoneNumber && normalizedPhoneNumber.length !== 10) {
+      setAddError('Phone number must be exactly 10 digits')
+      setIsSubmitting(false)
+      return
+    }
+
+    const normalizedEmergencyPhone = (addFormData.emergencyContact.phoneNumber || '').replace(/\D/g, '')
+    if (normalizedEmergencyPhone && normalizedEmergencyPhone.length !== 10) {
+      setAddError('Emergency contact phone must be exactly 10 digits')
+      setIsSubmitting(false)
+      return
+    }
+
     try {
+      // Transform to DB format before sending
+      const dbData = {
+        name: addFormData.name,
+        email: addFormData.email,
+        phone_number: normalizedPhoneNumber,
+        address: addFormData.address,
+        emergency_contact_name: addFormData.emergencyContact.name,
+        emergency_contact_phone: normalizedEmergencyPhone,
+        emergency_contact_relationship: addFormData.emergencyContact.relationship,
+        role: addFormData.role
+      }
+      
       const response = await fetch('/api/neon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'createMember',
-          ...addFormData
+          ...dbData
         })
       })
 
@@ -186,17 +315,20 @@ export default function MembersPage() {
         return
       }
 
-      // Add new member to the list
-      setMembers([...members, data])
+      // Transform response and add new member to the list
+      const transformedMember = transformMemberFromDB(data)
+      setMembers([...members, transformedMember])
       setShowAddModal(false)
       setAddFormData({
         name: '',
         email: '',
-        phone_number: '',
+        phoneNumber: '',
         address: '',
-        emergency_contact_name: '',
-        emergency_contact_phone: '',
-        emergency_contact_relationship: '',
+        emergencyContact: {
+          name: '',
+          phoneNumber: '',
+          relationship: ''
+        },
         role: 'member'
       })
     } catch (error) {
@@ -312,7 +444,7 @@ export default function MembersPage() {
               </h3>
                 <p style={{ margin: '5px 0', color: '#666' }}>{member.email}</p>
                 <p style={{ margin: '5px 0', color: '#666' }}>
-                {member.phone_number ? member.phone_number.replace(/(\d{3})(\d{3})(\d{4})/,"($1) $2-$3") : 'Phone number not provided'}
+                {member.phoneNumber ? member.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/,"($1) $2-$3") : 'Phone number not provided'}
                 </p>
               <p style={{
                 margin: '10px 0 0 0',
@@ -434,8 +566,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="tel"
-                  value={editFormData.phone_number || ''}
-                  onChange={(e) => handleEditInputChange('phone_number', e.target.value)}
+                  value={editFormData.phoneNumber || ''}
+                  onChange={(e) => handleEditInputChange('phoneNumber', e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -472,8 +604,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="text"
-                  value={editFormData.emergency_contact_name || ''}
-                  onChange={(e) => handleEditInputChange('emergency_contact_name', e.target.value)}
+                  value={editFormData.emergencyContact?.name || ''}
+                  onChange={(e) => handleEditInputChange('emergencyContact.name', e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -491,8 +623,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="tel"
-                  value={editFormData.emergency_contact_phone || ''}
-                  onChange={(e) => handleEditInputChange('emergency_contact_phone', e.target.value)}
+                  value={editFormData.emergencyContact?.phoneNumber || ''}
+                  onChange={(e) => handleEditInputChange('emergencyContact.phoneNumber', e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -510,8 +642,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="text"
-                  value={editFormData.emergency_contact_relationship || ''}
-                  onChange={(e) => handleEditInputChange('emergency_contact_relationship', e.target.value)}
+                  value={editFormData.emergencyContact?.relationship || ''}
+                  onChange={(e) => handleEditInputChange('emergencyContact.relationship', e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -554,7 +686,7 @@ export default function MembersPage() {
                   style={{
                     flex: 1,
                     padding: '10px',
-                    backgroundColor: '#28a745',
+                    backgroundColor: isSubmitting ? '#6c757d' : '#28a745',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
@@ -678,8 +810,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="tel"
-                  value={addFormData.phone_number}
-                  onChange={(e) => handleAddInputChange('phone_number', e.target.value)}
+                  value={addFormData.phoneNumber}
+                  onChange={(e) => handleAddInputChange('phoneNumber', e.target.value)}
                   placeholder="(123) 456-7890"
                   style={{
                     width: '100%',
@@ -720,8 +852,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="text"
-                  value={addFormData.emergency_contact_name}
-                  onChange={(e) => handleAddInputChange('emergency_contact_name', e.target.value)}
+                  value={addFormData.emergencyContact.name}
+                  onChange={(e) => handleAddInputChange('emergencyContact.name', e.target.value)}
                   placeholder="Enter emergency contact name"
                   style={{
                     width: '100%',
@@ -741,8 +873,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="tel"
-                  value={addFormData.emergency_contact_phone}
-                  onChange={(e) => handleAddInputChange('emergency_contact_phone', e.target.value)}
+                  value={addFormData.emergencyContact.phoneNumber}
+                  onChange={(e) => handleAddInputChange('emergencyContact.phoneNumber', e.target.value)}
                   placeholder="(123) 456-7890"
                   style={{
                     width: '100%',
@@ -762,8 +894,8 @@ export default function MembersPage() {
                 </label>
                 <input
                   type="text"
-                  value={addFormData.emergency_contact_relationship}
-                  onChange={(e) => handleAddInputChange('emergency_contact_relationship', e.target.value)}
+                  value={addFormData.emergencyContact.relationship}
+                  onChange={(e) => handleAddInputChange('emergencyContact.relationship', e.target.value)}
                   placeholder="Enter relation to emergency contact"
                   style={{
                     width: '100%',
@@ -807,7 +939,7 @@ export default function MembersPage() {
                   style={{
                     flex: 1,
                     padding: '10px',
-                    backgroundColor: '#28a745',
+                    backgroundColor: isSubmitting ? '#6c757d' : '#28a745',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
@@ -825,11 +957,13 @@ export default function MembersPage() {
                     setAddFormData({
                       name: '',
                       email: '',
-                      phone_number: '',
+                      phoneNumber: '',
                       address: '',
-                      emergency_contact_name: '',
-                      emergency_contact_phone: '',
-                      emergency_contact_relationship: '',
+                      emergencyContact: {
+                        name: '',
+                        phoneNumber: '',
+                        relationship: ''
+                      },
                       role: 'member'
                     })
                   }}

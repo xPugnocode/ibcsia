@@ -8,9 +8,13 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isNavigatingToLogin, setIsNavigatingToLogin] = useState(false)
   const router = useRouter()
 
   async function handleSignup() {
+    setIsLoading(true)
+
     try {
       const res = await fetch('/api/neon', {
         method: 'POST',
@@ -41,7 +45,14 @@ export default function SignupPage() {
       router.push('/')
     } catch (err) {
       setError('Login failed')
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  function handleNavigateToLogin() {
+    setIsNavigatingToLogin(true)
+    router.push('/auth/login')
   }
 
   return (
@@ -75,11 +86,38 @@ export default function SignupPage() {
           style={{ width: '100%', padding: '8px' }}
         />
       </div>
-      <button onClick={handleSignup} style={{ width: '100%', padding: '8px' }}>
-        Sign Up
+      <button
+        onClick={handleSignup}
+        disabled={isLoading || isNavigatingToLogin}
+        style={{
+          width: '100%',
+          padding: '8px',
+          backgroundColor: isLoading || isNavigatingToLogin ? '#6c757d' : '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: isLoading || isNavigatingToLogin ? 'not-allowed' : 'pointer',
+          opacity: isLoading || isNavigatingToLogin ? 0.7 : 1
+        }}
+      >
+        {isLoading ? 'Signing up...' : 'Sign Up'}
       </button>
-      <button onClick={() => router.push('/auth/login')} style={{ width: '100%', padding: '8px', marginTop: '10px' }}>
-        Already have an account?<br></br>Login
+      <button
+        onClick={handleNavigateToLogin}
+        disabled={isLoading || isNavigatingToLogin}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginTop: '10px',
+          backgroundColor: isLoading || isNavigatingToLogin ? '#6c757d' : '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: isLoading || isNavigatingToLogin ? 'not-allowed' : 'pointer',
+          opacity: isLoading || isNavigatingToLogin ? 0.7 : 1
+        }}
+      >
+        {isNavigatingToLogin ? 'Loading...' : <><span>Already have an account?</span><br></br><span>Login</span></>}
       </button>
     </div>
   )

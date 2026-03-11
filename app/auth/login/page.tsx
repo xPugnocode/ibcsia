@@ -7,13 +7,25 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [isNavigatingToSignup, setIsNavigatingToSignup] = useState(false)
   const router = useRouter()
 
   async function handleLogin() {
+    const trimmedEmail = email.trim()
+    const basicEmailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+    if (!basicEmailRegex.test(trimmedEmail)) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    setIsLoading(true)
+
     try {
       const res = await fetch('/api/neon', {
         method: 'POST',
-        body: JSON.stringify({ action: 'login', email, password }),
+        body: JSON.stringify({ action: 'login', email: trimmedEmail, password }),
       })
       const data = await res.json()
       
@@ -26,7 +38,14 @@ export default function LoginPage() {
       router.push('/')
     } catch (err) {
       setError('Login failed')
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  function handleNavigateToSignup() {
+    setIsNavigatingToSignup(true)
+    router.push('/auth/signup')
   }
 
   return (
@@ -51,11 +70,38 @@ export default function LoginPage() {
           style={{ width: '100%', padding: '8px' }}
         />
       </div>
-      <button onClick={handleLogin} style={{ width: '100%', padding: '8px' }}>
-        Login
+      <button
+        onClick={handleLogin}
+        disabled={isLoading || isNavigatingToSignup}
+        style={{
+          width: '100%',
+          padding: '8px',
+          backgroundColor: isLoading || isNavigatingToSignup ? '#6c757d' : '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: isLoading || isNavigatingToSignup ? 'not-allowed' : 'pointer',
+          opacity: isLoading || isNavigatingToSignup ? 0.7 : 1
+        }}
+      >
+        {isLoading ? 'Logging in...' : 'Login'}
       </button>
-      <button onClick={() => router.push('/auth/signup')} style={{ width: '100%', padding: '8px', marginTop: '10px' }}>
-        Don't have an account?<br></br>Sign Up
+      <button
+        onClick={handleNavigateToSignup}
+        disabled={isLoading || isNavigatingToSignup}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginTop: '10px',
+          backgroundColor: isLoading || isNavigatingToSignup ? '#6c757d' : '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: isLoading || isNavigatingToSignup ? 'not-allowed' : 'pointer',
+          opacity: isLoading || isNavigatingToSignup ? 0.7 : 1
+        }}
+      >
+        {isNavigatingToSignup ? 'Loading...' : <><span>Don't have an account?</span><br></br><span>Sign Up</span></>}
       </button>
     </div>
   )
