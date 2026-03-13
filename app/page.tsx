@@ -15,9 +15,6 @@ export default function Header() {
     const token = localStorage.getItem('authToken')
 
     if (!token) {
-      setIsLoggedIn(false)
-      setUserName('')
-      setNextBikeRide(null)
       return
     }
 

@@ -220,6 +220,23 @@ export async function verifyToken(token: string) {
   }
 }
 
+export async function getRoleFromToken(token: string) {
+  const session = await verifyToken(token)
+
+  const memberResult = await sql`
+    SELECT id, role
+    FROM members
+    WHERE id = ${session.member_id}
+    LIMIT 1
+  `
+
+  if (!memberResult[0]) {
+    throw new Error('Member not found for session')
+  }
+
+  return memberResult[0]
+}
+
 export async function getMembers() {
   try {
     const members = await sql`SELECT * FROM members ORDER BY name`
@@ -316,10 +333,31 @@ export async function updateMember(id: string, data: any) {
 
 export async function deleteMember(id: string) {
   try {
+    await sql`DELETE FROM users WHERE member_id = ${id}`
     await sql`DELETE FROM members WHERE id = ${id}`
     return true
   } catch (error) {
     console.error('Error deleting member:', error)
+    throw error
+  }
+}
+
+export async function retireMember(id: string) {
+  try {
+    const result = await sql`
+      UPDATE members
+      SET is_active = false, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${id}
+      RETURNING *
+    `
+
+    if (!result[0]) {
+      throw new Error('Member not found')
+    }
+
+    return result[0]
+  } catch (error) {
+    console.error('Error retiring member:', error)
     throw error
   }
 }
@@ -465,7 +503,26 @@ export async function POST(request: Request) {
       return NextResponse.json(member)
     }
 
+    if (action === 'retireMember') {
+      const actor = await getRoleFromToken(data.token)
+      if (actor.role !== 'leader' && actor.role !== 'admin') {
+        return NextResponse.json({ error: 'Only leaders or admins can retire members' }, { status: 403 })
+      }
+
+      const member = await retireMember(data.id)
+      return NextResponse.json(member)
+    }
+
     if (action === 'deleteMember') {
+      const actor = await getRoleFromToken(data.token)
+      if (actor.role !== 'leader' && actor.role !== 'admin') {
+        return NextResponse.json({ error: 'Only leaders or admins can delete members' }, { status: 403 })
+      }
+
+      if (actor.id === data.id) {
+        return NextResponse.json({ error: 'You cannot delete your own member record' }, { status: 400 })
+      }
+
       await deleteMember(data.id)
       return NextResponse.json({ success: true })
     }

@@ -139,7 +139,7 @@ export default function MembersPage() {
   const isLeader = currentUserRole === 'leader' || currentUserRole === 'admin'
 
   const filteredMembers = members.filter(member =>
-    member.name.toLowerCase().includes(searchQuery.toLowerCase())
+    member.isActive && member.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   function handleEditClick(member: Member) {
@@ -209,6 +209,97 @@ export default function MembersPage() {
     } catch (error) {
       setSubmitError('An error occurred while updating the member')
       console.error('Update error:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleRetireMember() {
+    if (!editingMember || !isLeader) return
+
+    const confirmed = window.confirm(`Retire ${editingMember.name}? They will no longer appear in the directory.`)
+    if (!confirmed) return
+
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        setSubmitError('You are not authenticated. Please log in again.')
+        return
+      }
+
+      const response = await fetch('/api/neon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'retireMember',
+          id: editingMember.id,
+          token
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        setSubmitError(data.error || 'Failed to retire member')
+        return
+      }
+
+      const transformedMember = transformMemberFromDB(data)
+      setMembers(prev => prev.map(m => (m.id === editingMember.id ? transformedMember : m)))
+      setShowEditModal(false)
+      setEditingMember(null)
+      setEditFormData({})
+    } catch (error) {
+      setSubmitError('An error occurred while retiring the member')
+      console.error('Retire member error:', error)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleDeleteMember() {
+    if (!editingMember || !isLeader) return
+
+    const confirmed = window.confirm(
+      `Delete ${editingMember.name}? This will permanently remove the member and any linked user account.`
+    )
+    if (!confirmed) return
+
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
+        setSubmitError('You are not authenticated. Please log in again.')
+        return
+      }
+
+      const response = await fetch('/api/neon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'deleteMember',
+          id: editingMember.id,
+          token
+        })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        setSubmitError(data.error || 'Failed to delete member')
+        return
+      }
+
+      setMembers(prev => prev.filter(m => m.id !== editingMember.id))
+      setShowEditModal(false)
+      setEditingMember(null)
+      setEditFormData({})
+    } catch (error) {
+      setSubmitError('An error occurred while deleting the member')
+      console.error('Delete member error:', error)
     } finally {
       setIsSubmitting(false)
     }
@@ -714,6 +805,50 @@ export default function MembersPage() {
                   Cancel
                 </button>
               </div>
+
+              {isLeader && (
+                <div style={{ marginTop: '10px' }}>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: '#666' }}>
+                    Leader actions
+                  </p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={handleRetireMember}
+                      disabled={isSubmitting || !editingMember.isActive}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        backgroundColor: '#ffc107',
+                        color: '#212529',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: isSubmitting || !editingMember.isActive ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        opacity: isSubmitting || !editingMember.isActive ? 0.6 : 1
+                      }}
+                    >
+                      Retire Member
+                    </button>
+                    <button
+                      onClick={handleDeleteMember}
+                      disabled={isSubmitting || editingMember.id === currentUserId}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: isSubmitting || editingMember.id === currentUserId ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        opacity: isSubmitting || editingMember.id === currentUserId ? 0.6 : 1
+                      }}
+                    >
+                      Delete Member
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -101,7 +101,7 @@ export default function LoginPage() {
           opacity: isLoading || isNavigatingToSignup ? 0.7 : 1
         }}
       >
-        {isNavigatingToSignup ? 'Loading...' : <><span>Don't have an account?</span><br></br><span>Sign Up</span></>}
+        {isNavigatingToSignup ? 'Loading...' : <><span>Don&apos;t have an account?</span><br></br><span>Sign Up</span></>}
       </button>
     </div>
   )

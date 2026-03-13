@@ -8,36 +8,36 @@ export default function GalleryPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    checkAuth()
-  }, [router])
-
-  async function checkAuth() {
-    const token = localStorage.getItem('authToken')
-    if (!token) {
-      router.push('/auth/login')
-      return
-    }
-
-    try {
-      const response = await fetch('/api/neon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'verifyToken', token })
-      })
-      const data = await response.json()
-
-      if (!response.ok || !data.member_id) {
-        localStorage.removeItem('authToken')
+    const runAuthCheck = async () => {
+      const token = localStorage.getItem('authToken')
+      if (!token) {
         router.push('/auth/login')
         return
       }
 
-      setIsLoading(false)
-    } catch {
-      localStorage.removeItem('authToken')
-      router.push('/auth/login')
+      try {
+        const response = await fetch('/api/neon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'verifyToken', token })
+        })
+        const data = await response.json()
+
+        if (!response.ok || !data.member_id) {
+          localStorage.removeItem('authToken')
+          router.push('/auth/login')
+          return
+        }
+
+        setIsLoading(false)
+      } catch {
+        localStorage.removeItem('authToken')
+        router.push('/auth/login')
+      }
     }
-  }
+
+    void runAuthCheck()
+  }, [router])
 
   if (isLoading) {
     return (
