@@ -32,6 +32,15 @@ export default function MembersPage() {
   const [submitError, setSubmitError] = useState('')
   const [addError, setAddError] = useState('')
 
+  const buttonEffectStyle = {
+    fontSize: '16px',
+    fontWeight: 500,
+    lineHeight: '1.2',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    transition: 'filter 0.2s ease'
+  } as const
+
   useEffect(() => {
     checkAuth()
   }, [])
@@ -458,6 +467,7 @@ export default function MembersPage() {
             <button
               onClick={() => setShowAddModal(true)}
               style={{
+                ...buttonEffectStyle,
                 padding: '8px 15px',
                 backgroundColor: '#28a745',
                 color: 'white',
@@ -474,6 +484,7 @@ export default function MembersPage() {
           <button
             onClick={() => router.push('/')}
             style={{
+              ...buttonEffectStyle,
               padding: '8px 15px',
               backgroundColor: '#6c757d',
               color: 'white',
@@ -551,6 +562,7 @@ export default function MembersPage() {
                 <button
                   onClick={() => handleEditClick(member)}
                   style={{
+                    ...buttonEffectStyle,
                     marginTop: '10px',
                     padding: '6px 12px',
                     backgroundColor: '#007bff',
@@ -775,6 +787,7 @@ export default function MembersPage() {
                   onClick={handleEditSubmit}
                   disabled={isSubmitting}
                   style={{
+                    ...buttonEffectStyle,
                     flex: 1,
                     padding: '10px',
                     backgroundColor: isSubmitting ? '#6c757d' : '#28a745',
@@ -792,6 +805,7 @@ export default function MembersPage() {
                   onClick={() => setShowEditModal(false)}
                   disabled={isSubmitting}
                   style={{
+                    ...buttonEffectStyle,
                     flex: 1,
                     padding: '10px',
                     backgroundColor: '#6c757d',
@@ -816,6 +830,7 @@ export default function MembersPage() {
                       onClick={handleRetireMember}
                       disabled={isSubmitting || !editingMember.isActive}
                       style={{
+                        ...buttonEffectStyle,
                         flex: 1,
                         padding: '10px',
                         backgroundColor: '#ffc107',
@@ -833,6 +848,7 @@ export default function MembersPage() {
                       onClick={handleDeleteMember}
                       disabled={isSubmitting || editingMember.id === currentUserId}
                       style={{
+                        ...buttonEffectStyle,
                         flex: 1,
                         padding: '10px',
                         backgroundColor: '#dc3545',
@@ -1072,6 +1088,7 @@ export default function MembersPage() {
                   onClick={handleAddSubmit}
                   disabled={isSubmitting}
                   style={{
+                    ...buttonEffectStyle,
                     flex: 1,
                     padding: '10px',
                     backgroundColor: isSubmitting ? '#6c757d' : '#28a745',
@@ -1104,6 +1121,7 @@ export default function MembersPage() {
                   }}
                   disabled={isSubmitting}
                   style={{
+                    ...buttonEffectStyle,
                     flex: 1,
                     padding: '10px',
                     backgroundColor: '#6c757d',

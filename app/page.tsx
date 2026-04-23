@@ -11,6 +11,22 @@ export default function Header() {
   const [nextBikeRide, setNextBikeRide] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
+  const navButtonStyle = {
+    padding: '8px 15px',
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    fontSize: '16px',
+    fontWeight: 500,
+    lineHeight: '1.2',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    textDecoration: 'none',
+    display: 'inline-block',
+    cursor: 'pointer'
+  } as const
+
   useEffect(() => {
     const token = localStorage.getItem('authToken')
 
@@ -100,11 +116,11 @@ export default function Header() {
     }}>
       <h1 style={{ margin: 0, fontSize: '20px' }}>Lincoln Bike Club</h1>
       <nav style={{ display: 'flex', gap: '15px' }}>
-        <Link href="/info" style={{ textDecoration: 'none', color: '#333' }}>Info</Link>
+        <Link href="/info" style={navButtonStyle}>Info</Link>
         {isLoggedIn && (
           <>
-            <Link href="/gallery" style={{ textDecoration: 'none', color: '#333' }}>Gallery</Link>
-            <Link href="/members" style={{ textDecoration: 'none', color: '#333' }}>Members</Link>
+            {/* <Link href="/gallery" style={{ textDecoration: 'none', color: '#333' }}>Gallery</Link> */}
+            <Link href="/members" style={navButtonStyle}>Members</Link>
           </>
         )}
         {isLoggedIn ? (
@@ -117,8 +133,12 @@ export default function Header() {
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.7 : 1
+              fontSize: '16px',
+              fontWeight: 500,
+              lineHeight: '1.2',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              cursor: isLoading ? 'not-allowed' : 'pointer'
             }}
           >
             {isLoading ? 'Logging out...' : 'Logout'}
@@ -133,8 +153,12 @@ export default function Header() {
               color: 'white',
               border: 'none',
               borderRadius: '4px',
+              fontSize: '16px',
+              fontWeight: 500,
+              lineHeight: '1.2',
+              appearance: 'none',
+              WebkitAppearance: 'none',
               cursor: isLoading ? 'not-allowed' : 'pointer',
-              opacity: isLoading ? 0.7 : 1,
               textDecoration: 'none'
             }}
           >

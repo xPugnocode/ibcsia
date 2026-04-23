@@ -83,7 +83,7 @@ export default function GalleryPage() {
               fontWeight: 'bold'
             }}
           >
-            + Add Media
+            Coming Soon!
           </button>
           
           <button

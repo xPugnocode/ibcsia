@@ -10,6 +10,7 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isNavigatingToLogin, setIsNavigatingToLogin] = useState(false)
+  const [isNavigatingBack, setIsNavigatingBack] = useState(false)
   const router = useRouter()
 
   async function handleSignup() {
@@ -55,8 +56,23 @@ export default function SignupPage() {
     router.push('/auth/login')
   }
 
+  function handleBack() {
+    setIsNavigatingBack(true)
+    router.push('/')
+  }
+
   return (
-    <div style={{ padding: '20px', maxWidth: '400px', margin: '50px auto' }}>
+    <div
+      style={{
+        padding: '20px',
+        maxWidth: '400px',
+        margin: '50px auto',
+        backgroundColor: '#f9f9f9',
+        border: '1px solid #e5e5e5',
+        borderRadius: '8px',
+        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.05)'
+      }}
+    >
       <h1>Sign Up</h1>
       {error && <p style={{ color: 'red' }}>{error}</p>}
       <div style={{ marginBottom: '10px' }}>
@@ -88,36 +104,68 @@ export default function SignupPage() {
       </div>
       <button
         onClick={handleSignup}
-        disabled={isLoading || isNavigatingToLogin}
+        disabled={isLoading || isNavigatingToLogin || isNavigatingBack}
         style={{
           width: '100%',
           padding: '8px',
-          backgroundColor: isLoading || isNavigatingToLogin ? '#6c757d' : '#007bff',
+          backgroundColor: isLoading || isNavigatingToLogin || isNavigatingBack ? '#6c757d' : '#007bff',
           color: 'white',
           border: 'none',
           borderRadius: '4px',
-          cursor: isLoading || isNavigatingToLogin ? 'not-allowed' : 'pointer',
-          opacity: isLoading || isNavigatingToLogin ? 0.7 : 1
+          fontSize: '16px',
+          fontWeight: 500,
+          lineHeight: '1.2',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          cursor: isLoading || isNavigatingToLogin || isNavigatingBack ? 'not-allowed' : 'pointer'
         }}
       >
         {isLoading ? 'Signing up...' : 'Sign Up'}
       </button>
+      <p style={{ marginTop: '22px', marginBottom: '0', color: '#495057' }}>
+        Already have an account?
+      </p>
       <button
         onClick={handleNavigateToLogin}
-        disabled={isLoading || isNavigatingToLogin}
+        disabled={isLoading || isNavigatingToLogin || isNavigatingBack}
+        style={{
+          width: '100%',
+          padding: '8px',
+          marginTop: '8px',
+          backgroundColor: isLoading || isNavigatingToLogin || isNavigatingBack ? '#6c757d' : '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          fontSize: '16px',
+          fontWeight: 500,
+          lineHeight: '1.2',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          cursor: isLoading || isNavigatingToLogin || isNavigatingBack ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {isNavigatingToLogin ? 'Loading...' : 'Login'}
+      </button>
+      <button
+        onClick={handleBack}
+        disabled={isLoading || isNavigatingToLogin || isNavigatingBack}
         style={{
           width: '100%',
           padding: '8px',
           marginTop: '10px',
-          backgroundColor: isLoading || isNavigatingToLogin ? '#6c757d' : '#007bff',
+          backgroundColor: isNavigatingBack ? '#495057' : '#6c757d',
           color: 'white',
           border: 'none',
           borderRadius: '4px',
-          cursor: isLoading || isNavigatingToLogin ? 'not-allowed' : 'pointer',
-          opacity: isLoading || isNavigatingToLogin ? 0.7 : 1
+          fontSize: '16px',
+          fontWeight: 500,
+          lineHeight: '1.2',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          cursor: isLoading || isNavigatingToLogin || isNavigatingBack ? 'not-allowed' : 'pointer'
         }}
       >
-        {isNavigatingToLogin ? 'Loading...' : <><span>Already have an account?</span><br></br><span>Login</span></>}
+        {isNavigatingBack ? 'Returning to menu...' : 'Return to menu'}
       </button>
     </div>
   )
